@@ -243,7 +243,7 @@ function buildNav() {
 }
 function openSheet() { $('#sheetBg').classList.add('on'); $('#sheet').classList.add('on'); }
 function closeSheet() { const a = $('#sheetBg'), b = $('#sheet'); if (a) a.classList.remove('on'); if (b) b.classList.remove('on'); }
-function go(k) { closeSheet(); cur = k; buildNav(); panels[k](); { const m = $('#main'); m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); clearTimeout(go.t); go.t = setTimeout(() => m.classList.remove('enter'), 1000); } window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function go(k) { closeSheet(); if (document.body.classList.contains('speaking')) stopSpeak(); cur = k; buildNav(); panels[k](); { const m = $('#main'); m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); clearTimeout(go.t); go.t = setTimeout(() => m.classList.remove('enter'), 1000); } window.scrollTo({ top: 0, behavior: 'smooth' }); }
 window.go = go;
 const main = () => $('#main');
 
@@ -519,6 +519,7 @@ function voiceScore(v) {
   if (/google|microsoft|apple/.test(n)) sc += 15;
   if (!v.localService) sc += 10;
   if (lang === CFG.lang + '-' + CFG.lang) sc += 5;
+  if (/elsa|isabella|diego|alice|federica|luca|paola|emma|jorge|monica|paulina|denise|henri|katja|conrad|amala|samantha|google/.test(n)) sc += 8;
   if (/compact|espeak|festival|robot/.test(n)) sc -= 40;
   return sc;
 }
@@ -526,10 +527,12 @@ function podVoices() { if (!('speechSynthesis' in window)) return []; return spe
 function pickVoice(who) {
   const vs = podVoices(); if (!vs.length) return null; let saved = {}; try { saved = JSON.parse(localStorage.getItem(VKEY) || '{}'); } catch { }
   const mine = vs.find(v => v.name === saved[who]); if (mine) return mine;
-  return who === 'A' ? vs[0] : (vs[1] || vs[0]);
+  if (who === 'P') { let o = {}; try { o = JSON.parse(localStorage.getItem('shashi_oralv') || '{}'); } catch { } const m = vs.find(v => v.name === o.v); return m || vs[0]; }
+  return who === 'B' ? (vs[1] || vs[0]) : vs[0];
 }
 function ttsClean(t) {
-  t = String(t).replace(/[•*_#`~]/g, ' ').replace(/\s*[—–]\s*/g, ', ').replace(/\(([^)]*)\)/g, ', $1, ');
+  const SU = { it: 'su', en: 'out of', es: 'sobre', fr: 'sur', de: 'von' }[CFG.lang] || '/';
+  t = String(t).replace(/(\d+(?:[.,]\d+)?)\s*\/\s*(\d+)/g, '$1 ' + SU + ' $2').replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, ' ').replace(/->|→|=>/g, ', ').replace(/[•*_#`~]/g, ' ').replace(/\s*[—–]\s*/g, ', ').replace(/\(([^)]*)\)/g, ', $1, ');
   if (CFG.lang === 'it') t = t.replace(/\bes\.\s/gi, 'ad esempio ').replace(/\becc\./gi, 'eccetera').replace(/\bpag\.\s?/gi, 'pagina ').replace(/\bcap\.\s?/gi, 'capitolo ').replace(/\bn\.\s?(\d)/gi, 'numero $1');
   return t.replace(/\s+/g, ' ').replace(/,\s*,/g, ',').replace(/\s+([,.;:!?])/g, '$1').trim();
 }
@@ -575,9 +578,17 @@ function podResume() { POD.paused = false; if (POD.cancelMode || !speechSynthesi
 function podToggle() { if (POD.playing) podPause(); else if (POD.paused) podResume(); else podPlayFrom(POD.chunk || 0); }
 function podStop() { PQ.token++; if ('speechSynthesis' in window) { speechSynthesis.cancel(); speechSynthesis.resume(); } POD.playing = false; POD.paused = false; POD.chunk = 0; POD.i = 0; podAwake(false); setPlayBtn(); markPod(); }
 function podSkip(d) { if (!POD.script.length) return; const i = Math.max(0, Math.min(POD.script.length - 1, POD.i + d)); podPlayFrom(POD.lineStart[i]); }
-function speakNow(text) {
-  if (!('speechSynthesis' in window)) return; PQ.token++; POD.playing = false; speechSynthesis.cancel(); speechSynthesis.resume(); const v = pickVoice('A');
-  ttsChunks(ttsClean(text)).forEach(tx => { const u = new SpeechSynthesisUtterance(tx); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = CFG.lang; u.rate = .98; speechSynthesis.speak(u); });
+const OV = () => { let o = {}; try { o = JSON.parse(localStorage.getItem('shashi_oralv') || '{}'); } catch { } return { rate: o.rate || 1, v: o.v || '', on: o.on !== false, free: !!o.free }; };
+const OVset = (k, x) => { const o = OV(); o[k] = x; try { localStorage.setItem('shashi_oralv', JSON.stringify(o)); } catch { } };
+let SPK = { token: 0 };
+function stopSpeak() { SPK.token++; if ('speechSynthesis' in window) { speechSynthesis.cancel(); speechSynthesis.resume(); } document.body.classList.remove('speaking'); }
+function speakNow(text, done) {
+  if (!('speechSynthesis' in window)) { done && done(); return; } PQ.token++; POD.playing = false; setPlayBtn(); speechSynthesis.cancel(); speechSynthesis.resume();
+  const token = ++SPK.token, v = pickVoice('P'), cs = ttsChunks(ttsClean(text)), rate = OV().rate;
+  if (!cs.length) { done && done(); return; } document.body.classList.add('speaking');
+  cs.forEach((tx, i) => { const u = new SpeechSynthesisUtterance(tx); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = CFG.lang; u.rate = rate; u.pitch = 1;
+    if (i === cs.length - 1) { u.onend = () => { if (token !== SPK.token) return; document.body.classList.remove('speaking'); done && done(); }; u.onerror = u.onend; }
+    speechSynthesis.speak(u); });
 }
 function fillVoices() {
   const a = $('#vA'), b = $('#vB'); if (!a || !b) return; const vs = podVoices(), ca = pickVoice('A'), cb = pickVoice('B');
@@ -658,11 +669,14 @@ function localCorrect(ans) {
   return `${hit >= refKw.length * .6 ? '✅ Bene!' : '⚠️ Risposta incompleta.'} Concetti citati: ${hit}/${refKw.length}.${miss.length ? '\nTi manca: ' + miss.join(', ') + '.' : ''}\n\n📖 Spiegazione corretta dagli appunti:\n${ref.join(' ') || '—'}`;
 }
 panels.oral = () => {
-  main().innerHTML = `<h2>🗣️ ${t('oral')}</h2>` + ctl() + `<div class="card"><button class="btn" id="go">${t('start')} interrogazione</button> <span class="muted">${CFG.apiKey ? 'Il professore AI ti fa domande, corregge e spiega gli errori.' : 'Modalità offline semplice: confronto la tua risposta con gli appunti. Con la chiave AI l\'interrogazione è molto più realistica.'}</span></div><div class="card"><label style="flex-direction:row;align-items:center"><input type="checkbox" id="oralTts">&nbsp;🔊 Leggi ad alta voce domande e correzioni</label></div><div id="chat"></div>`;
+  main().innerHTML = `<h2>🗣️ ${t('oral')}</h2>` + ctl() + `<div class="card"><button class="btn" id="go">${t('start')} interrogazione</button> <span class="muted">${CFG.apiKey ? 'Il professore AI ti fa domande, corregge e spiega gli errori.' : 'Modalità offline semplice: confronto la tua risposta con gli appunti. Con la chiave AI l\'interrogazione è molto più realistica.'}</span></div><div class="card"><h3>🔊 Voce del professore</h3><div class="row"><label style="flex-direction:row;align-items:center"><input type="checkbox" id="oralTts" ${OV().on ? 'checked' : ''}>&nbsp;Leggi ad alta voce</label><label style="flex-direction:row;align-items:center"><input type="checkbox" id="oralFree" ${OV().free ? 'checked' : ''}>&nbsp;🎧 Mani libere (rispondi a voce)</label></div><div class="row"><label>Voce<select id="vP"></select></label><label>Velocità<select id="rP">${[.85, .95, 1, 1.1, 1.25].map(r => `<option value="${r}" ${OV().rate === r ? 'selected' : ''}>${r}x</option>`).join('')}</select></label><button class="btn alt" id="tP">▶ Prova voce</button><button class="btn alt" id="xP">⏹ Ferma</button></div></div><div id="chat"></div>`;
+  { const vp = $('#vP'), vs = podVoices(), cur = pickVoice('P'); vp.innerHTML = vs.map(v => `<option value="${esc(v.name)}" ${cur && cur.name === v.name ? 'selected' : ''}>${esc(v.name)}${/natural|neural|online|premium|enhanced/i.test(v.name) ? ' ★' : ''}</option>`).join('') || '<option>(voce predefinita)</option>';
+    vp.onchange = () => OVset('v', vp.value); $('#rP').onchange = e => OVset('rate', +e.target.value); $('#oralTts').onchange = e => OVset('on', e.target.checked); $('#oralFree').onchange = e => { OVset('free', e.target.checked); if (e.target.checked) { OVset('on', true); $('#oralTts').checked = true; } };
+    $('#tP').onclick = () => speakNow('Ciao! Sono il tuo professore. Rispondi con calma: ti ascolto e ti spiego ogni errore. Hai ottenuto sette su dieci.'); $('#xP').onclick = stopSpeak; }
   wireCtl(); $('#go').onclick = async () => {
     const g = getSel(); if (!g) return; ORAL = { msgs: [], q: kws(g.text, 12), i: 0, g, ai: !!CFG.apiKey }; $('#chat').innerHTML = '<div class="card" id="log"></div><div class="card row"><textarea id="ans" style="min-height:70px" placeholder="Rispondi qui…"></textarea><button class="btn" id="send">Invia</button><button class="btn alt" id="mic">🎤</button></div>';
-    const log = (c, x) => { const tt = $('#oralTts'); if (c === 'a' && x !== '…' && tt && tt.checked && 'speechSynthesis' in window) { speakNow(x); } $('#log').insertAdjacentHTML('beforeend', `<div class="msg ${c}">${esc(x)}</div>`); $('#log').lastChild.scrollIntoView({ block: 'nearest' }); };
-    const sys = `Sei un professore di ${g.note.subject || g.note.title} che interroga uno studente. Livello: ${LV[g.level]}. Lingua: ${LN[CFG.lang]}. Usa SOLO questo materiale:\n${g.text.slice(0, 10000)}\n\nRegole: fai UNA domanda alla volta. Quando lo studente risponde: 1) dì cosa è corretto, 2) segnala ogni errore e spiegalo in modo semplice, 3) dai un voto da 1 a 10, 4) fai la domanda successiva. Dopo 8 domande fai un riepilogo finale con voto complessivo e consigli.`;
+    const log = (c, x) => { const tt = $('#oralTts'); if (c === 'a' && x !== '…' && tt && tt.checked && 'speechSynthesis' in window) { speakNow(x, () => { if (OV().free && $('#mic')) listen(true); }); } $('#log').insertAdjacentHTML('beforeend', `<div class="msg ${c}">${esc(x)}</div>`); $('#log').lastChild.scrollIntoView({ block: 'nearest' }); };
+    const sys = `Sei un professore di ${g.note.subject || g.note.title} che interroga uno studente. Livello: ${LV[g.level]}. Lingua: ${LN[CFG.lang]}. Usa SOLO questo materiale:\n${g.text.slice(0, 10000)}\n\nRegole: fai UNA domanda alla volta. Quando lo studente risponde: 1) dì cosa è corretto, 2) segnala ogni errore e spiegalo in modo semplice, 3) dai un voto da 1 a 10, 4) fai la domanda successiva. Dopo 8 domande fai un riepilogo finale con voto complessivo e consigli. Scrivi in modo naturale e parlato, con frasi brevi, senza tabelle, elenchi puntati, markdown o emoji: il testo verrà letto ad alta voce.`;
     const ask = async text => {
       if (!ORAL.ai) { if (text) { log('a', localCorrect(text)); ORAL.i++; } log('a', localQuestion()); return; }
       ORAL.msgs.push({ role: 'user', content: text || 'Inizia l\'interrogazione con la prima domanda.' }); log('a', '…');
@@ -670,7 +684,19 @@ panels.oral = () => {
       catch (e) { $('#log').lastChild.remove(); toast('AI non disponibile: ' + e.message); ORAL.ai = false; ORAL.msgs.pop(); if (text) log('a', localCorrect(text)); log('a', localQuestion()); }
     };
     $('#send').onclick = () => { const v = $('#ans').value.trim(); if (!v) return; $('#ans').value = ''; log('u', v); ask(v); };
-    $('#mic').onclick = () => { const R = window.SpeechRecognition || window.webkitSpeechRecognition; if (!R) return toast('Riconoscimento vocale non supportato da questo browser.'); const r = new R(); r.lang = CFG.lang; r.onresult = e => $('#ans').value += ' ' + e.results[0][0].transcript; r.start(); toast('🎤 Parla ora…'); };
+    let REC = null;
+    const listen = auto => {
+      const R = window.SpeechRecognition || window.webkitSpeechRecognition; if (!R) { if (!auto) toast('Riconoscimento vocale non supportato da questo browser.'); return; }
+      if (REC) { try { REC.stop(); } catch { } REC = null; $('#mic').classList.remove('rec'); return; }
+      stopSpeak(); const r = new R(); REC = r; r.lang = CFG.lang; r.interimResults = true; r.continuous = false; let fin = '';
+      const base = $('#ans').value ? $('#ans').value.trim() + ' ' : '';
+      r.onresult = e => { let it = ''; fin = ''; for (const x of e.results) { if (x.isFinal) fin += x[0].transcript; else it += x[0].transcript; } $('#ans').value = base + fin + it; };
+      r.onend = () => { REC = null; const m = $('#mic'); if (m) m.classList.remove('rec'); const v = $('#ans') && $('#ans').value.trim(); if (auto && v && OV().free) $('#send').click(); };
+      r.onerror = () => { REC = null; const m = $('#mic'); if (m) m.classList.remove('rec'); };
+      try { r.start(); $('#mic').classList.add('rec'); toast('🎤 Ti ascolto…'); } catch { }
+    };
+    window.listen = listen;
+    $('#mic').onclick = () => listen(false);
     ask('');
   };
 };

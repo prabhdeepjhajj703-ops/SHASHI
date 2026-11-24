@@ -1,4 +1,4 @@
-const CACHE = 'shashi-v11';
+const CACHE = 'shashi-v12';
 const CORE = ['./', './index.html', './style.css', './app.js', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', e => {

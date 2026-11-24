@@ -178,3 +178,11 @@ Per aggiornare: ricarica su GitHub tutti i file del nuovo zip, aspetta 2 minuti 
 - Pulsanti più grandi, margini di sicurezza per i telefoni con notch, nessuno scorrimento orizzontale (anche a 360 px).
 
 Per aggiornare: ricarica tutti i file su GitHub, attendi circa 2 minuti, poi Ctrl+F5. Se l'app è installata, aprila una volta con internet.
+
+## Novità (undicesimo aggiornamento: voce AI)
+- **Voce del professore** scelta e regolabile (voce, velocità) con pulsante "Prova voce" e "Ferma"; la scelta resta salvata.
+- Preferisce da sola le voci più naturali del dispositivo (★).
+- La voce non legge più emoji e simboli; "7/10" diventa "7 su 10".
+- Il professore AI parla in modo più discorsivo, senza elenchi.
+- **Mani libere**: dopo la domanda ti ascolta e invia la risposta da solo quando smetti di parlare.
+- Microfono con testo in tempo reale e indicatore rosso mentre ascolta.
