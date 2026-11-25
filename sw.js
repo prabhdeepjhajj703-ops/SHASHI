@@ -1,5 +1,5 @@
-const CACHE = 'shashi-v12';
-const CORE = ['./', './index.html', './style.css', './app.js', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './icon-180.png'];
+const CACHE = 'shashi-v14';
+const CORE = ['./', './index.html', './style.css', './app.js', './plus.js', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));

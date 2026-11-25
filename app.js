@@ -74,12 +74,21 @@ function parseJSON(s) { if (!s) return null; const m = s.match(/[\[{][\s\S]*[\]}
 const LV = { lv1: 'scuola elementare (bambino di 6-10 anni)', lv2: 'scuola media (11-13 anni)', lv3: 'scuola superiore (14-19 anni)', lv4: 'università / adulto' };
 
 // ---------- intelligenza artificiale (chiave personale, opzionale) ----------
+const hasAI = () => !!(CFG.openaiKey || CFG.apiKey);
+const TUTOR = 'Sei un tutor esperto in TUTTE le materie scolastiche e universitarie (matematica, fisica, chimica, biologia, scienze, italiano, letteratura, storia, geografia, filosofia, inglese e altre lingue, latino, greco, informatica, arte, musica, diritto, economia, educazione civica). Rispondi con precisione. Quando correggi: indica OGNI errore commesso, spiega perché è sbagliato e mostra la correzione PASSO PER PASSO (Passo 1, Passo 2…), con calcoli e ragionamenti completi. Se c\'è una foto, leggila con attenzione.';
 async function aiChat(system, messages, max = 4000) {
+  if (CFG.openaiKey) {
+    const msgs = [{ role: 'system', content: TUTOR + '\n' + system }, ...messages.map(m => m.images && m.images.length ? { role: m.role, content: [{ type: 'text', text: m.content }, ...m.images.map(u => ({ type: 'image_url', image_url: { url: u } }))] } : { role: m.role, content: m.content })];
+    const r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + CFG.openaiKey }, body: JSON.stringify({ model: CFG.openaiModel || 'gpt-4o', messages: msgs, max_tokens: max }) });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error?.message || 'Errore OpenAI');
+    return d.choices[0].message.content || '';
+  }
   if (!CFG.apiKey) return null;
+  const am = messages.map(m => { const im = (m.images || []).map(u => /^data:([^;]+);base64,(.+)$/.exec(u)).filter(Boolean).map(x => ({ type: 'image', source: { type: 'base64', media_type: x[1], data: x[2] } })); return { role: m.role, content: im.length ? [...im, { type: 'text', text: m.content }] : m.content }; });
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': CFG.apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: max, system, messages })
+    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: max, system: TUTOR + '\n' + system, messages: am })
   });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error?.message || 'Errore AI');
@@ -151,14 +160,14 @@ function tick() {
     else TM.mode = 'work';
     TM.left = dur(TM.mode); TM.end = Date.now() + TM.left * 1000;
     const msg = TM.mode === 'work' ? '📚 Si torna a studiare!' : '☕ Pausa! ' + TIPS[Math.floor(Math.random() * TIPS.length)];
-    toast(msg); notify('SHASHI', msg);
+    toast(msg); notify('SHASHI', msg); vibrate(); flashTitle(msg);
   }
   updTimer();
 }
 const fmt = s => pad(Math.floor(s / 60)) + ':' + pad(s % 60);
 const MODE = { work: '📚 Studio', brk: '☕ Pausa breve', long: '🌴 Pausa lunga' };
 function updTimer() {
-  $('#hdrTimer').textContent = (TM.run ? '▶ ' : '⏱️ ') + fmt(TM.left); document.title = TM.run ? fmt(TM.left) + ' · SHASHI' : 'SHASHI'; keepAwake(TM.run); ringUpd();
+  $('#hdrTimer').textContent = (TM.run ? '▶ ' : '⏱️ ') + fmt(TM.left); if (!FLASH) document.title = (TM.run && S.settings.tabt !== false) ? fmt(TM.left) + ' · SHASHI' : 'SHASHI'; keepAwake(TM.run); ringUpd();
   if ($('#tmDisp')) { $('#tmDisp').textContent = fmt(TM.left); $('#tmMode').textContent = MODE[TM.mode] + ` · ${TM.cycle}/${S.settings.cycles}`; $('#tmBtn').textContent = TM.run ? '⏸ ' + t('pause') : '▶ ' + t('start'); }
 }
 function beep() {
@@ -169,7 +178,14 @@ function beep() {
     [[528, 264], [1056, 528]].forEach(([f0, f1]) => { const o = c.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(f0, now); o.frequency.exponentialRampToValueAtTime(f1, now + 2.2); o.connect(g); o.start(now); o.stop(now + 2.5); });
   } catch { }
 }
-function notify(a, b) { try { if ('Notification' in window && Notification.permission === 'granted') new Notification(a, { body: b, icon: 'icon.svg' }); } catch { } }
+function notify(a, b) { try { if (S.settings.nat !== false && 'Notification' in window && Notification.permission === 'granted') new Notification(a, { body: b, icon: 'icon-192.png', badge: 'icon-192.png', vibrate: [200, 100, 200] }); } catch { } }
+function vibrate(p) { try { if (S.settings.vib !== false && 'vibrate' in navigator) navigator.vibrate(p || [300, 150, 300, 150, 500]); } catch { } }
+let FLASH = null;
+function flashTitle(msg) {
+  if (S.settings.tabt === false || !document.hidden) return; clearInterval(FLASH); let n = 0;
+  FLASH = setInterval(() => { document.title = n++ % 2 ? 'SHASHI' : '🔔 ' + msg; if (!document.hidden || n > 30) { clearInterval(FLASH); FLASH = null; updTimer(); } }, 900);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && FLASH) { clearInterval(FLASH); FLASH = null; updTimer(); } });
 function animMap() {
   $$('#mapSvg line').forEach((l, i) => l.style.animationDelay = (.15 + i * .035) + 's');
   const gs = $$('#mapSvg g'); gs.forEach((g, i) => g.style.animationDelay = (i === gs.length - 1 ? 0 : .25 + i * .05) + 's');
@@ -182,7 +198,7 @@ function confetti() {
   let f = 0; (function step() { x.clearRect(0, 0, c.width, c.height); P.forEach(q => { q.vy += .35; q.x += q.vx; q.y += q.vy; q.r += q.vr; x.save(); x.translate(q.x, q.y); x.rotate(q.r); x.fillStyle = q.col; x.fillRect(-q.s / 2, -q.s / 3, q.s, q.s * .6); x.restore(); }); if (++f < 150) requestAnimationFrame(step); else c.remove(); })();
 }
 const lvl = () => Math.floor(Math.sqrt((S.xp || 0) / 40)) + 1;
-function showXp() { const el = $('#xpPill'); if (el) el.innerHTML = '⭐ Lv ' + lvl() + '<span class="lbl"> · ' + (S.xp || 0) + ' XP</span>'; }
+function showXp() { const el = $('#xpPill'); if (!el) return; const L = lvl(), lo = 40 * (L - 1) ** 2, hi = 40 * L ** 2, pc = Math.max(0, Math.min(100, ((S.xp || 0) - lo) / (hi - lo) * 100)); el.innerHTML = '⭐ Lv ' + L + '<span class="lbl"> · ' + (S.xp || 0) + ' XP</span><i class="xpbar"><b style="width:' + pc.toFixed(0) + '%"></b></i>'; el.title = (hi - (S.xp || 0)) + ' XP al livello ' + (L + 1); }
 function addXp(n) { const b = lvl(); S.xp = (S.xp || 0) + n; save(); showXp(); if (lvl() > b) confetti(); if (lvl() > b) toast('🎉 Livello ' + lvl() + ' raggiunto! Continua così!', 6000); checkBadges(); }
 const TIPS = ["Bevi un bicchiere d'acqua 💧", 'Alzati e fai stretching 🤸', 'Guarda lontano fuori dalla finestra 👀', 'Fai 5 respiri profondi 🌬️', 'Lascia il telefono: riposa gli occhi 😌'];
 function subjList() {
@@ -294,11 +310,11 @@ panels.timer0 = () => {
   <button class="btn" id="s-save">${t('save')}</button></div>
   <div class="row"><button class="btn alt" data-p="25,5,15,4">Pomodoro 25/5</button><button class="btn alt" data-p="50,10,20,3">50/10</button><button class="btn alt" data-p="90,20,30,2">Deep work 90/20</button><button class="btn alt" data-p="15,3,10,4">Veloce 15/3</button></div>
   <p class="muted">Quando un periodo finisce suona un avviso e parte automaticamente la pausa (o lo studio).</p>
-  <label style="flex-direction:row;align-items:center"><input type="checkbox" id="s-snd" ${s.sound !== false ? 'checked' : ''}>&nbsp;Suono a fine periodo</label> <button class="btn alt" id="s-fs">⛶ Schermo intero</button></div>`;
+  <label style="flex-direction:row;align-items:center"><input type="checkbox" id="s-snd" ${s.sound !== false ? 'checked' : ''}>&nbsp;Suono a fine periodo</label> <button class="btn alt" id="s-fs">⛶ Schermo intero</button> <button class="btn alt" id="s-al">🔔 Avvisi e vibrazione</button></div>`;
   $('#tmBtn').onclick = toggleTimer; $('#tmReset').onclick = resetTimer;
   $('#tmTask').oninput = e => { S.focusTask = e.target.value; save(); };
   $('#tmSubj').oninput = e => { S.lastSubject = e.target.value.trim(); save(); };
-  $('#s-snd').onchange = e => { S.settings.sound = e.target.checked; save(); };
+  $('#s-snd').onchange = e => { S.settings.sound = e.target.checked; save(); }; $('#s-al').onclick = openAlerts;
   $('#s-fs').onclick = () => { const el = document.documentElement; (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen && el.requestFullscreen()); };
   $('#tmSkip').onclick = () => { TM.left = 0; TM.end = Date.now(); if (!TM.run) { TM.run = true; TM.iv = setInterval(tick, 500); } tick(); };
   $('#s-save').onclick = () => { Object.assign(S.settings, { work: +$('#s-w').value || 25, brk: +$('#s-b').value || 5, long: +$('#s-l').value || 15, cycles: +$('#s-c').value || 4 }); save(); resetTimer(); toast('Timer aggiornato ✔️'); };
@@ -471,7 +487,7 @@ function drawMap(d) {
   return `<svg class="map" id="mapSvg" viewBox="0 0 1100 740" xmlns="http://www.w3.org/2000/svg"><rect width="1100" height="740" fill="#fff"/>${lines}${boxes}${boxSVG(cx, cy, d.center || '', 'var(--b,#ffb347)', true)}</svg>`;
 }
 panels.map = () => {
-  main().innerHTML = `<h2>🕸️ ${t('map')}</h2>` + ctl() + `<div class="card"><button class="btn" id="go">${t('generate')}</button> <span class="muted">${CFG.apiKey ? 'AI attiva' : 'Modalità offline semplice (per risultati migliori aggiungi la chiave AI in Impostazioni)'}</span></div><div id="out"></div>`;
+  main().innerHTML = `<h2>🕸️ ${t('map')}</h2>` + ctl() + `<div class="card"><button class="btn" id="go">${t('generate')}</button> <span class="muted">${hasAI() ? 'AI attiva' : 'Modalità offline semplice (per risultati migliori aggiungi la chiave AI in Impostazioni)'}</span></div><div id="out"></div>`;
   wireCtl(); $('#go').onclick = async () => {
     const g = getSel(); if (!g) return; busy($('#out'), 'Creo la mappa…'); let d = null;
     try { d = parseJSON(await aiText('Sei un tutor che crea mappe concettuali. Rispondi SOLO con JSON valido.', `${styleNote(g)}\nCrea una mappa concettuale del testo. Formato: {"center":"tema","branches":[{"label":"concetto breve","items":["dettaglio/esempio breve"]}],"explanation":"spiegazione semplificata di 6-10 frasi"}. Da 5 a 8 rami, massimo 4-5 elementi per ramo (testi brevi, max 60 caratteri).\n\nTESTO:\n${g.text.slice(0, 14000)}`)); } catch (e) { toast('AI non disponibile: ' + e.message); }
@@ -496,7 +512,7 @@ function localPodcast(g) {
   s.push({ who: 'A', text: it ? 'Ed è tutto per oggi. Ripassa e buono studio!' : "That's all for today. Review it and good luck!" }); return s;
 }
 async function genPodcast(g, len, prog) {
-  if (!CFG.apiKey) return localPodcast(g);
+  if (!hasAI()) return localPodcast(g);
   const per = len === 'short' ? g.pages.length : len === 'medium' ? 4 : 2, words = len === 'short' ? 500 : len === 'medium' ? 650 : 800, chunks = [];
   for (let i = 0; i < g.pages.length; i += per) chunks.push(g.pages.slice(i, i + per).join('\n\n'));
   const parts = chunks.slice(0, 20), out = [];
@@ -581,8 +597,9 @@ function podSkip(d) { if (!POD.script.length) return; const i = Math.max(0, Math
 const OV = () => { let o = {}; try { o = JSON.parse(localStorage.getItem('shashi_oralv') || '{}'); } catch { } return { rate: o.rate || 1, v: o.v || '', on: o.on !== false, free: !!o.free }; };
 const OVset = (k, x) => { const o = OV(); o[k] = x; try { localStorage.setItem('shashi_oralv', JSON.stringify(o)); } catch { } };
 let SPK = { token: 0 };
-function stopSpeak() { SPK.token++; if ('speechSynthesis' in window) { speechSynthesis.cancel(); speechSynthesis.resume(); } document.body.classList.remove('speaking'); }
+function stopSpeak() { if (typeof cloudStop === 'function') cloudStop(); SPK.token++; if ('speechSynthesis' in window) { speechSynthesis.cancel(); speechSynthesis.resume(); } document.body.classList.remove('speaking'); }
 function speakNow(text, done) {
+  if (typeof cloudOn === 'function' && cloudOn()) { PQ.token++; POD.playing = false; setPlayBtn(); if ('speechSynthesis' in window) speechSynthesis.cancel(); return cloudSpeak(text, done, 'P'); }
   if (!('speechSynthesis' in window)) { done && done(); return; } PQ.token++; POD.playing = false; setPlayBtn(); speechSynthesis.cancel(); speechSynthesis.resume();
   const token = ++SPK.token, v = pickVoice('P'), cs = ttsChunks(ttsClean(text)), rate = OV().rate;
   if (!cs.length) { done && done(); return; } document.body.classList.add('speaking');
@@ -615,7 +632,7 @@ function wirePod() {
 panels.podcast = () => {
   const it = CFG.lang === 'it';
   main().innerHTML = `<h2>🎙️ ${t('podcast')}</h2>` + ctl() + `<div class="card"><div class="row"><label>Durata<select id="plen"><option value="short">Breve (~3 min)</option><option value="medium">Media (~10 min)</option><option value="long">Lunga (30+ min, per più pagine)</option></select></label><button class="btn" id="go">${t('generate')}</button></div>
-  <p class="muted">Seleziona sopra le pagine da trasformare in podcast.${CFG.apiKey ? '' : ' Senza chiave AI il podcast legge una versione semplificata del testo.'}</p></div>
+  <p class="muted">Seleziona sopra le pagine da trasformare in podcast.${hasAI() ? '' : ' Senza chiave AI il podcast legge una versione semplificata del testo.'}</p></div>
   <div class="card"><h3>🔊 Voci del podcast</h3><div class="row"><label>Voce A 🎙️<select id="vA"></select></label><label>Voce B 🎧<select id="vB"></select></label><button class="btn alt" id="vTest">▶ Prova le voci</button></div>
   <p class="muted">Le voci con ★ sono le più naturali. Per voci migliori: <b>PC</b> → usa Edge (voci "Natural"); <b>Android</b> → Impostazioni › Sintesi vocale › Google; <b>iPhone</b> → Impostazioni › Accessibilità › Contenuto letto › Voci › "Migliorata/Premium". Lo schermo resta acceso durante l'ascolto.</p></div><div id="out">${podHTML()}</div>`;
   wireCtl(); fillVoices(); wirePod();
@@ -669,21 +686,23 @@ function localCorrect(ans) {
   return `${hit >= refKw.length * .6 ? '✅ Bene!' : '⚠️ Risposta incompleta.'} Concetti citati: ${hit}/${refKw.length}.${miss.length ? '\nTi manca: ' + miss.join(', ') + '.' : ''}\n\n📖 Spiegazione corretta dagli appunti:\n${ref.join(' ') || '—'}`;
 }
 panels.oral = () => {
-  main().innerHTML = `<h2>🗣️ ${t('oral')}</h2>` + ctl() + `<div class="card"><button class="btn" id="go">${t('start')} interrogazione</button> <span class="muted">${CFG.apiKey ? 'Il professore AI ti fa domande, corregge e spiega gli errori.' : 'Modalità offline semplice: confronto la tua risposta con gli appunti. Con la chiave AI l\'interrogazione è molto più realistica.'}</span></div><div class="card"><h3>🔊 Voce del professore</h3><div class="row"><label style="flex-direction:row;align-items:center"><input type="checkbox" id="oralTts" ${OV().on ? 'checked' : ''}>&nbsp;Leggi ad alta voce</label><label style="flex-direction:row;align-items:center"><input type="checkbox" id="oralFree" ${OV().free ? 'checked' : ''}>&nbsp;🎧 Mani libere (rispondi a voce)</label></div><div class="row"><label>Voce<select id="vP"></select></label><label>Velocità<select id="rP">${[.85, .95, 1, 1.1, 1.25].map(r => `<option value="${r}" ${OV().rate === r ? 'selected' : ''}>${r}x</option>`).join('')}</select></label><button class="btn alt" id="tP">▶ Prova voce</button><button class="btn alt" id="xP">⏹ Ferma</button></div></div><div id="chat"></div>`;
+  main().innerHTML = `<h2>🗣️ ${t('oral')}</h2>` + ctl() + `<div class="card"><button class="btn" id="go">${t('start')} interrogazione</button> <span class="muted">${hasAI() ? 'Il professore AI ti fa domande, corregge e spiega gli errori.' : 'Modalità offline semplice: confronto la tua risposta con gli appunti. Con la chiave AI l\'interrogazione è molto più realistica.'}</span></div><div class="card"><h3>🔊 Voce del professore</h3><div class="row"><label style="flex-direction:row;align-items:center"><input type="checkbox" id="oralTts" ${OV().on ? 'checked' : ''}>&nbsp;Leggi ad alta voce</label><label style="flex-direction:row;align-items:center"><input type="checkbox" id="oralFree" ${OV().free ? 'checked' : ''}>&nbsp;🎧 Mani libere (rispondi a voce)</label></div><div class="row"><label>Voce<select id="vP"></select></label><label>Velocità<select id="rP">${[.85, .95, 1, 1.1, 1.25].map(r => `<option value="${r}" ${OV().rate === r ? 'selected' : ''}>${r}x</option>`).join('')}</select></label><button class="btn alt" id="tP">▶ Prova voce</button><button class="btn alt" id="xP">⏹ Ferma</button></div></div><div id="chat"></div>`;
   { const vp = $('#vP'), vs = podVoices(), cur = pickVoice('P'); vp.innerHTML = vs.map(v => `<option value="${esc(v.name)}" ${cur && cur.name === v.name ? 'selected' : ''}>${esc(v.name)}${/natural|neural|online|premium|enhanced/i.test(v.name) ? ' ★' : ''}</option>`).join('') || '<option>(voce predefinita)</option>';
     vp.onchange = () => OVset('v', vp.value); $('#rP').onchange = e => OVset('rate', +e.target.value); $('#oralTts').onchange = e => OVset('on', e.target.checked); $('#oralFree').onchange = e => { OVset('free', e.target.checked); if (e.target.checked) { OVset('on', true); $('#oralTts').checked = true; } };
     $('#tP').onclick = () => speakNow('Ciao! Sono il tuo professore. Rispondi con calma: ti ascolto e ti spiego ogni errore. Hai ottenuto sette su dieci.'); $('#xP').onclick = stopSpeak; }
   wireCtl(); $('#go').onclick = async () => {
-    const g = getSel(); if (!g) return; ORAL = { msgs: [], q: kws(g.text, 12), i: 0, g, ai: !!CFG.apiKey }; $('#chat').innerHTML = '<div class="card" id="log"></div><div class="card row"><textarea id="ans" style="min-height:70px" placeholder="Rispondi qui…"></textarea><button class="btn" id="send">Invia</button><button class="btn alt" id="mic">🎤</button></div>';
-    const log = (c, x) => { const tt = $('#oralTts'); if (c === 'a' && x !== '…' && tt && tt.checked && 'speechSynthesis' in window) { speakNow(x, () => { if (OV().free && $('#mic')) listen(true); }); } $('#log').insertAdjacentHTML('beforeend', `<div class="msg ${c}">${esc(x)}</div>`); $('#log').lastChild.scrollIntoView({ block: 'nearest' }); };
-    const sys = `Sei un professore di ${g.note.subject || g.note.title} che interroga uno studente. Livello: ${LV[g.level]}. Lingua: ${LN[CFG.lang]}. Usa SOLO questo materiale:\n${g.text.slice(0, 10000)}\n\nRegole: fai UNA domanda alla volta. Quando lo studente risponde: 1) dì cosa è corretto, 2) segnala ogni errore e spiegalo in modo semplice, 3) dai un voto da 1 a 10, 4) fai la domanda successiva. Dopo 8 domande fai un riepilogo finale con voto complessivo e consigli. Scrivi in modo naturale e parlato, con frasi brevi, senza tabelle, elenchi puntati, markdown o emoji: il testo verrà letto ad alta voce.`;
-    const ask = async text => {
-      if (!ORAL.ai) { if (text) { log('a', localCorrect(text)); ORAL.i++; } log('a', localQuestion()); return; }
-      ORAL.msgs.push({ role: 'user', content: text || 'Inizia l\'interrogazione con la prima domanda.' }); log('a', '…');
+    const g = getSel(); if (!g) return; ORAL = { msgs: [], q: kws(g.text, 12), i: 0, g, ai: !!hasAI() }; $('#chat').innerHTML = '<div class="card" id="log"></div><div class="card row"><textarea id="ans" style="min-height:70px" placeholder="Rispondi qui…"></textarea><button class="btn" id="send">Invia</button><button class="btn alt" id="mic">🎤</button><button class="btn alt" id="pic" title="Allega una foto">📷</button><input type="file" id="picIn" accept="image/*" multiple hidden><div id="picTh" class="thumbs"></div></div>';
+    let PIC = [];
+    const log = (c, x) => { const tt = $('#oralTts'); if (c === 'a' && x !== '…' && tt && tt.checked && (cloudOn() || 'speechSynthesis' in window)) { speakNow(x, () => { if (OV().free && $('#mic')) listen(true); }); } $('#log').insertAdjacentHTML('beforeend', `<div class="msg ${c}">${esc(x)}</div>`); $('#log').lastChild.scrollIntoView({ block: 'nearest' }); };
+    const sys = `Sei un professore di ${g.note.subject || g.note.title} che interroga uno studente. Livello: ${LV[g.level]}. Lingua: ${LN[CFG.lang]}. Usa SOLO questo materiale:\n${g.text.slice(0, 10000)}\n\nRegole: fai UNA domanda alla volta. Quando lo studente risponde: 1) dì cosa è corretto, 2) segnala OGNI errore commesso e spiegalo PASSO PER PASSO (Passo 1, Passo 2…) mostrando la correzione completa; se lo studente allega una foto, leggila e correggila, 3) dai un voto da 1 a 10, 4) fai la domanda successiva. Dopo 8 domande fai un riepilogo finale con voto complessivo e consigli. Scrivi in modo naturale e parlato, con frasi brevi, senza tabelle, elenchi puntati, markdown o emoji: il testo verrà letto ad alta voce.`;
+    const ask = async (text, imgs = []) => {
+      if (!ORAL.ai) { if (imgs.length && !text) { toast('Per leggere le foto serve la chiave AI nelle Impostazioni.'); return; } if (text) { log('a', localCorrect(text)); ORAL.i++; } log('a', localQuestion()); return; }
+      ORAL.msgs.forEach(m => delete m.images); ORAL.msgs.push({ role: 'user', content: text || (imgs.length ? 'Ecco la mia risposta nella foto allegata.' : 'Inizia l\'interrogazione con la prima domanda.'), images: imgs }); log('a', '…');
       try { const r = await aiChat(sys, ORAL.msgs, 1500); $('#log').lastChild.remove(); ORAL.msgs.push({ role: 'assistant', content: r }); log('a', r); }
       catch (e) { $('#log').lastChild.remove(); toast('AI non disponibile: ' + e.message); ORAL.ai = false; ORAL.msgs.pop(); if (text) log('a', localCorrect(text)); log('a', localQuestion()); }
     };
-    $('#send').onclick = () => { const v = $('#ans').value.trim(); if (!v) return; $('#ans').value = ''; log('u', v); ask(v); };
+    $('#send').onclick = () => { const v = $('#ans').value.trim(); if (!v && !PIC.length) return; $('#ans').value = ''; const im = PIC.splice(0); $('#picTh').innerHTML = ''; log('u', (v || '📷 Foto allegata') + (im.length ? ' [📷 ×' + im.length + ']' : '')); ask(v, im); };
+    $('#pic').onclick = () => $('#picIn').click(); $('#picIn').onchange = async e => { for (const f of e.target.files) PIC.push(await resizeImg(f)); $('#picTh').innerHTML = PIC.map(i => `<img src="${i}">`).join(''); e.target.value = ''; };
     let REC = null;
     const listen = auto => {
       const R = window.SpeechRecognition || window.webkitSpeechRecognition; if (!R) { if (!auto) toast('Riconoscimento vocale non supportato da questo browser.'); return; }
@@ -805,7 +824,7 @@ panels.settings = () => {
   $$('[data-av]').forEach(b => b.onclick = () => { S.profile.avatar = b.dataset.av; save(); buildNav(); toast('Avatar aggiornato ' + b.dataset.av); });
   $('#csv').onclick = () => { CFG.clientId = $('#cid').value.trim(); CFG.apiKey = $('#ak').value.trim(); CFG.argoUrl = $('#ar').value.trim() || CFG.argoUrl; saveCfg(); buildNav(); panels.settings(); toast('Salvato ✔️'); };
   $('#fsm').onclick = () => { CFG.fs = Math.max(80, (CFG.fs || 100) - 10); saveCfg(); applyTheme(); }; $('#fsp').onclick = () => { CFG.fs = Math.min(150, (CFG.fs || 100) + 10); saveCfg(); applyTheme(); }; $('#dys').onchange = e => { CFG.dys = e.target.checked; saveCfg(); applyTheme(); };
-  $('#ins').onclick = installApp; $('#nt').onclick = () => Notification.requestPermission().then(r => toast('Notifiche: ' + r));
+  $('#ins').onclick = installApp; $('#nt').onclick = openAlerts;
   $('#ex').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(S)], { type: 'application/json' })); a.download = 'shashi-backup.json'; a.click(); };
   $('#im').onchange = async e => { try { S = Object.assign(defaults(), JSON.parse(await e.target.files[0].text())); save(); toast('Backup importato ✔️'); go('settings'); } catch { toast('File non valido.'); } };
 };
@@ -822,12 +841,49 @@ function initGoogle(box) {
     google.accounts.id.renderButton(box, { theme: 'filled_blue', size: 'large', text: 'signin_with', locale: CFG.lang });
   }).catch(() => box.innerHTML = '<p class="muted">Impossibile caricare Google (serve internet).</p>');
 }
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; $('#installBtn').hidden = false; });
-function installApp() {
-  if (deferredInstall) { deferredInstall.prompt(); deferredInstall = null; $('#installBtn').hidden = true; }
-  else toast('Chrome/Edge: menu ⋮ → "Installa app". iPhone: Condividi → "Aggiungi alla schermata Home".', 7000);
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; const d = $('#directInst'); if (d) d.hidden = false; });
+window.addEventListener('appinstalled', () => { deferredInstall = null; $('#installBtn').hidden = true; closeModal(); toast('🎉 SHASHI installata!'); });
+function openModal(html) {
+  closeModal(); const m = document.createElement('div'); m.id = 'modal'; m.innerHTML = `<div class="mbox" role="dialog" aria-modal="true"><button class="mx" aria-label="Chiudi">✕</button>${html}</div>`;
+  m.onclick = e => { if (e.target === m) closeModal(); }; m.querySelector('.mx').onclick = closeModal; document.body.appendChild(m); requestAnimationFrame(() => m.classList.add('on')); return m;
 }
-$('#installBtn').onclick = installApp;
+function closeModal() { const m = $('#modal'); if (m) m.remove(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+function installApp() {
+  const ua = navigator.userAgent || '', ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1), and = /Android/.test(ua), def = ios ? 'ios' : and ? 'and' : 'desk', sa = isStandalone();
+  const step = (n, t, d) => `<div class="istep"><b>${n}</b><div><strong>${t}</strong><p class="muted">${d}</p></div></div>`;
+  const tabs = {
+    and: step(1, 'Apri il menu del browser', 'Tocca i tre puntini ⋮ in alto a destra (Chrome o Samsung Internet).') + step(2, '“Installa app” o “Aggiungi a schermata Home”', 'Scegli una delle due voci nel menu.') + step(3, 'Conferma', 'SHASHI compare nella schermata Home e si apre a schermo intero.'),
+    ios: step(1, 'Usa Safari', 'Su iPhone e iPad l\'installazione funziona solo da Safari, non da Chrome.') + step(2, 'Tocca Condividi', 'È il quadrato con la freccia verso l\'alto, in basso al centro.') + step(3, '“Aggiungi alla schermata Home”', 'Scorri l\'elenco e tocca la voce con il ➕.') + step(4, 'Tocca “Aggiungi”', 'In alto a destra: l\'icona di SHASHI appare nella Home.'),
+    desk: step(1, 'Chrome o Edge', 'Nella barra dell\'indirizzo, a destra, clicca l\'icona <b>Installa</b> (monitor con ⊕).') + step(2, 'Safari su Mac', 'Menu <b>File → Aggiungi al Dock…</b>')
+  };
+  const m = openModal(`<h2>📲 Installa SHASHI</h2><div class="envbox"><span>🔍 ${ios ? 'iPhone / iPad' : and ? 'Android' : 'Computer'}</span><span class="badge">${sa ? '✅ App installata' : '🌐 Nel browser'}</span></div>
+  ${sa ? '<p>Stai già usando SHASHI come app installata. 🎉</p>' : ''}
+  <button class="btn" id="directInst" ${deferredInstall ? '' : 'hidden'} style="width:100%">⚡ Installa ora con 1 tocco</button>
+  <div class="tabs2"><button data-t="and">🤖 Android</button><button data-t="ios">📱 iPhone</button><button data-t="desk">💻 Computer</button></div><div id="itab"></div>
+  <p class="muted">Dopo l'installazione funziona anche senza internet.</p>`);
+  const show = k => { $('#itab').innerHTML = tabs[k]; $$('.tabs2 button', m).forEach(b => b.classList.toggle('on', b.dataset.t === k)); };
+  $$('.tabs2 button', m).forEach(b => b.onclick = () => show(b.dataset.t)); show(def);
+  $('#directInst').onclick = () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall.userChoice.then(r => { if (r.outcome === 'accepted') toast('Installazione in corso…'); deferredInstall = null; $('#directInst').hidden = true; }); };
+}
+function openAlerts() {
+  const sup = 'Notification' in window, perm = sup ? Notification.permission : 'unsupported';
+  const tg = (id, k, ti, d) => `<label class="tgl"><div><strong>${ti}</strong><p class="muted">${d}</p></div><input type="checkbox" id="${id}" ${S.settings[k] !== false ? 'checked' : ''}></label>`;
+  const lab = { granted: '✅ Attive', denied: '🚫 Bloccate dal browser', default: '⏳ Da autorizzare', unsupported: 'Non supportate' }[perm];
+  const m = openModal(`<h2>🔔 Avvisi del timer</h2><div class="envbox"><span>Notifiche di sistema</span><span class="badge ${perm === 'granted' ? 'ok' : perm === 'denied' ? 'no' : ''}">${lab}</span></div>
+  ${perm === 'default' ? '<button class="btn" id="aReq" style="width:100%">Abilita le notifiche</button>' : ''}
+  ${perm === 'denied' ? '<p class="muted">Per sbloccarle: tocca il lucchetto 🔒 accanto all\'indirizzo → Notifiche → Consenti, poi ricarica la pagina.</p>' : ''}
+  ${tg('aNat', 'nat', 'Notifica a fine periodo', 'Avviso del sistema anche con l\'app in background')}
+  ${tg('aVib', 'vib', 'Vibrazione', 'Vibra alla fine del periodo (telefoni compatibili)')}
+  ${tg('aTit', 'tabt', 'Conto alla rovescia nel titolo', 'Mostra il tempo nella scheda e la fa lampeggiare a fine periodo')}
+  <button class="btn alt" id="aTest" style="width:100%">⚡ Invia un avviso di prova</button>`);
+  const bind = (id, k) => $(id, m).onchange = e => { S.settings[k] = e.target.checked; save(); updTimer(); };
+  bind('#aNat', 'nat'); bind('#aVib', 'vib'); bind('#aTit', 'tabt');
+  if ($('#aReq', m)) $('#aReq', m).onclick = () => Notification.requestPermission().then(() => openAlerts());
+  $('#aTest', m).onclick = () => { beep(); vibrate([150, 100, 150]); notify('⚡ Prova SHASHI', 'Se leggi questo, gli avvisi funzionano!'); toast('🔔 Avviso di prova inviato'); };
+}
+$('#installBtn').onclick = installApp; $('#installBtn').hidden = isStandalone();
 
 // ---- Pianificatore con banner prossima verifica ----
 panels.planner1 = () => {

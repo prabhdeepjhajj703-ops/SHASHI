@@ -186,3 +186,20 @@ Per aggiornare: ricarica tutti i file su GitHub, attendi circa 2 minuti, poi Ctr
 - Il professore AI parla in modo più discorsivo, senza elenchi.
 - **Mani libere**: dopo la domanda ti ascolta e invia la risposta da solo quando smetti di parlare.
 - Microfono con testo in tempo reale e indicatore rosso mentre ascolta.
+
+## Novità (dodicesimo aggiornamento: base "SHASHI DEEPxSHANTI")
+- **Guida all'installazione** (pulsante ⬇️ nell'intestazione): rileva Android, iPhone o computer, mostra i passaggi giusti e, dove il browser lo permette, il pulsante "Installa ora con 1 tocco". Su iPhone il pulsante ora compare sempre.
+- **Avvisi del timer** (Timer → 🔔 Avvisi e vibrazione, oppure Impostazioni): stato delle notifiche, aiuto se bloccate, interruttori per notifica di sistema, vibrazione e conto alla rovescia nel titolo della scheda, più avviso di prova.
+- A fine periodo il telefono vibra e il titolo della scheda lampeggia se sei su un'altra scheda.
+- Barra XP accanto al livello nell'intestazione, con i punti mancanti al livello successivo.
+
+## Novità (tredicesimo aggiornamento: OpenAI, Spotify, appunti e mappe)
+- **OpenAI**: in Impostazioni incolla la tua chiave OpenAI (resta solo nel tuo dispositivo, mai nel codice). L'AI risponde su tutte le materie, legge le foto e spiega ogni errore passo per passo.
+- **Tutor AI** (menu destro): chat con domande, foto dei compiti, correzioni passo per passo e lettura ad alta voce.
+- **Voci realistiche** OpenAI e **conversazione tra due persone** (professore + studente, oppure due compagni) nell'Interrogazione AI.
+- **Orari scolastici**: nuova schermata in 3 mosse (materia → giorni → Aggiungi), colonne per giorno, materie colorate, "Oggi/Domani".
+- **Appunti e cartelle**: tre colonne (cartelle · appunti · editor) e sottocartelle a più livelli.
+- **Mappe concettuali**: 4 modi di crearle (automatica, da scaletta, da elenco, vuota), 3 disposizioni (radiale, albero orizzontale, albero verticale), modifica completa: aggiungi, rinomina, elimina, comprimi/espandi, trascina, annulla, zoom, mappe salvate.
+- **Spotify**: playlist per studiare e link personali nel player incorporato (accedi a Spotify nel player per i brani interi).
+- **Schermo a riposo**: dopo 5 minuti senza usare l'app (regolabile) timer e musica vanno in pausa e compaiono foto a rotazione; un tocco e riprende.
+- **Effetti sonori** per sezioni, pulsanti, avvisi e livelli (con volume e interruttore) e nuove animazioni (anche "Riduci le animazioni").
