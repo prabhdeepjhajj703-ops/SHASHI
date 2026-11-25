@@ -203,3 +203,16 @@ Per aggiornare: ricarica tutti i file su GitHub, attendi circa 2 minuti, poi Ctr
 - **Spotify**: playlist per studiare e link personali nel player incorporato (accedi a Spotify nel player per i brani interi).
 - **Schermo a riposo**: dopo 5 minuti senza usare l'app (regolabile) timer e musica vanno in pausa e compaiono foto a rotazione; un tocco e riprende.
 - **Effetti sonori** per sezioni, pulsanti, avvisi e livelli (con volume e interruttore) e nuove animazioni (anche "Riduci le animazioni").
+
+## Novità (quattordicesimo aggiornamento: Google Drive, voce umana, animazioni, efficienza)
+- **Google Drive**: Impostazioni → «Dati su Google Drive» → *Collega Google Drive*. SHASHI crea nel tuo Drive la cartella **SHASHI** con `appunti.json`, `mappe.json`, `calendario-orari.json`, `studio-profilo.json` e `info.json`. Salvataggio automatico ad ogni modifica, ripristino da Drive, avviso se su Drive ci sono dati più recenti. SHASHI vede solo i file che crea lui (permesso `drive.file`).
+- **Voce più umana**: modello OpenAI espressivo (`gpt-4o-mini-tts`) con una personalità diversa per professore, studentessa e tutor (pause, esitazioni, intonazione). Con la voce del dispositivo il ritmo e il tono variano leggermente da frase a frase. Dialoghi più spontanei.
+- **Animazioni stile PowerPoint**: 8 transizioni di pagina (Dissolvenza, Spinta, Cancellazione, Zoom, Divisione, Rivelazione, Ribalta, Trasformazione) e 9 effetti d'entrata (Appari, Dissolvi, Entra da sinistra, Galleggia, Zoom, Rimbalzo, Cresci e ruota, Swivel, Spirale), con velocità e modalità casuale. Si scelgono in Impostazioni → «Animazioni stile PowerPoint».
+- **Efficienza**: le scritture sul dispositivo sono raggruppate (e salvate anche alla chiusura), niente più sfarfallii delle animazioni nelle liste, upload su Drive solo dei file cambiati. Controllo automatico di tutto il codice e delle sezioni: nessun errore trovato.
+
+### Come ottenere il Client ID Google (serve per Drive e per «Accedi con Google»)
+1. Vai su https://console.cloud.google.com/projectcreate e crea un progetto (nome: SHASHI).
+2. **API e servizi → Libreria** → cerca **Google Drive API** → **Abilita**.
+3. **API e servizi → Schermata consenso OAuth** → tipo **Esterno**; nome app, tua email; in **Utenti di prova** aggiungi la tua email (e quelle di chi userà l'app). Aggiungi l'ambito `.../auth/drive.file`.
+4. **Credenziali → Crea credenziali → ID client OAuth → Applicazione web**. In **Origini JavaScript autorizzate** scrivi `https://prabhdeepjhajj703-ops.github.io` (senza `/SHASHI` e senza `/` finale).
+5. Copia il Client ID, incollalo in Impostazioni → «Client ID Google», salva e premi *Collega Google Drive*.

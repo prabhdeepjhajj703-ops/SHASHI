@@ -412,3 +412,49 @@ body.speaking #log .msg.a:last-child{box-shadow:0 0 0 2px var(--a);transition:bo
 @media(max-width:900px){#sfxBtn{display:none}}
 .noanim *,.noanim *::before,.noanim *::after{animation:none!important;transition:none!important}
 @media(prefers-reduced-motion:reduce){#main>*,.dl,.nn,.ttDay,.mk,.msg,.sc{animation:none!important}.ilayer.on{animation:none}}
+
+/* ===== plus2: Drive + animazioni stile PowerPoint ===== */
+.gdBar{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:rgba(127,127,127,.12);margin:10px 0;font-weight:600;font-size:.9rem}
+.gdDot{font-size:1.1rem}.cloud{font-size:.85em}
+.gdHelp{margin-top:10px}.gdHelp summary{cursor:pointer;font-weight:700}.gdSteps{padding-left:20px;line-height:1.55;font-size:.88rem}.gdSteps code{background:rgba(127,127,127,.18);padding:1px 6px;border-radius:6px;word-break:break-all}
+:root{--spd:1}
+/* transizioni di pagina */
+#main.enter[data-tr="fade"]{animation:trFade calc(.6s*var(--spd)) ease both}
+#main.enter[data-tr="push"]{animation:trPush calc(.55s*var(--spd)) var(--ease) both}
+#main.enter[data-tr="wipe"]{animation:trWipe calc(.7s*var(--spd)) var(--ease) both}
+#main.enter[data-tr="zoom"]{animation:trZoom calc(.55s*var(--spd)) var(--ease) both}
+#main.enter[data-tr="split"]{animation:trSplit calc(.7s*var(--spd)) var(--ease) both}
+#main.enter[data-tr="reveal"]{animation:trReveal calc(.7s*var(--spd)) var(--ease) both}
+#main.enter[data-tr="flip"]{animation:trFlip calc(.7s*var(--spd)) var(--ease) both;transform-origin:left center}
+#main.enter[data-tr="morph"]{animation:trMorph calc(.7s*var(--spd)) var(--ease) both}
+@keyframes trFade{from{opacity:0}}
+@keyframes trPush{from{transform:translateX(70px);opacity:0}}
+@keyframes trWipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes trZoom{from{transform:scale(.88);opacity:0}}
+@keyframes trSplit{from{clip-path:inset(0 50% 0 50%)}to{clip-path:inset(0 0 0 0)}}
+@keyframes trReveal{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes trFlip{from{transform:perspective(1000px) rotateY(-55deg);opacity:0}}
+@keyframes trMorph{from{transform:scale(.96);filter:blur(10px);opacity:0}}
+/* effetti d'entrata degli elementi */
+#main.enter[data-ent]:not([data-ent="none"])>*{animation-delay:calc(var(--i,0)*70ms*var(--spd));animation-fill-mode:both;animation-timing-function:var(--ease)}
+#main.enter[data-ent="appear"]>*{animation-name:enAppear;animation-duration:.01s}
+#main.enter[data-ent="fade"]>*{animation-name:enFade;animation-duration:calc(.6s*var(--spd))}
+#main.enter[data-ent="fly"]>*{animation-name:enFly;animation-duration:calc(.6s*var(--spd))}
+#main.enter[data-ent="float"]>*{animation-name:enFloat;animation-duration:calc(.6s*var(--spd))}
+#main.enter[data-ent="zoom"]>*{animation-name:enZoom;animation-duration:calc(.55s*var(--spd))}
+#main.enter[data-ent="bounce"]>*{animation-name:enBounce;animation-duration:calc(.8s*var(--spd))}
+#main.enter[data-ent="grow"]>*{animation-name:enGrow;animation-duration:calc(.65s*var(--spd))}
+#main.enter[data-ent="swivel"]>*{animation-name:enSwivel;animation-duration:calc(.7s*var(--spd))}
+#main.enter[data-ent="spin"]>*{animation-name:enSpin;animation-duration:calc(.75s*var(--spd))}
+#main.enter[data-ent="none"]>*{animation:none}
+@keyframes enAppear{0%{opacity:0}1%,100%{opacity:1}}
+@keyframes enFade{from{opacity:0}}
+@keyframes enFly{from{transform:translateX(-90px);opacity:0}}
+@keyframes enFloat{from{transform:translateY(26px);opacity:0}}
+@keyframes enZoom{from{transform:scale(.6);opacity:0}}
+@keyframes enBounce{0%{opacity:0;transform:translateY(-70px)}55%{opacity:1;transform:translateY(10px)}75%{transform:translateY(-5px)}100%{transform:none}}
+@keyframes enGrow{from{transform:scale(.3) rotate(-40deg);opacity:0}}
+@keyframes enSwivel{from{transform:perspective(700px) rotateX(-80deg);opacity:0}}
+@keyframes enSpin{from{transform:rotate(-160deg) scale(.2);opacity:0}}
+#modal .mbox{animation:enZoom .35s var(--ease) both}
+@media(prefers-reduced-motion:reduce){#main.enter,#main.enter>*{animation:none!important}}

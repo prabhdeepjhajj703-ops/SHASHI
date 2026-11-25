@@ -5,13 +5,13 @@
 // ============ utilità ============
 const fmtMsg = x => esc(x).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^(Passo \d+[:.)]?)/gm, '<b>$1</b>').replace(/\n/g, '<br>');
 const getOV = () => { try { return JSON.parse(localStorage.getItem('shashi_oralv') || '{}'); } catch { return {}; } };
-const CVOICES = ['nova', 'onyx', 'shimmer', 'echo', 'fable', 'alloy'];
-const CVLAB = { nova: 'Nova (donna, calda)', onyx: 'Onyx (uomo, profondo)', shimmer: 'Shimmer (donna, dolce)', echo: 'Echo (uomo, pacato)', fable: 'Fable (narratore)', alloy: 'Alloy (neutra)' };
-const cvFor = who => { const o = getOV(); return o['cv' + who] || ({ A: 'onyx', B: 'nova', P: 'onyx' })[who] || 'nova'; };
+const CVOICES = ['ash', 'coral', 'sage', 'ballad', 'verse', 'nova', 'onyx', 'shimmer', 'echo', 'fable', 'alloy'];
+const CVLAB = { ash: 'Ash (uomo, caldo) ★', coral: 'Coral (donna, vivace) ★', sage: 'Sage (donna, calma) ★', ballad: 'Ballad (uomo, espressivo) ★', verse: 'Verse (espressiva) ★', nova: 'Nova (donna, calda)', onyx: 'Onyx (uomo, profondo)', shimmer: 'Shimmer (donna, dolce)', echo: 'Echo (uomo, pacato)', fable: 'Fable (narratore)', alloy: 'Alloy (neutra)' };
+const cvFor = who => { const o = getOV(); return o['cv' + who] || ({ A: 'ash', B: 'coral', P: 'sage' })[who] || 'coral'; };
 
 // ============ voce realistica OpenAI (TTS) ============
-const CL = { token: 0, el: null, cache: new Map(), fail: false };
-const cloudOn = () => !!CFG.openaiKey && !CL.fail && getOV().engine !== 'device';
+const CL = { token: 0, el: null, cache: new Map(), fail: false, failAt: 0, model: '' };
+const cloudOn = () => { if (CL.fail && Date.now() - CL.failAt > 60000) CL.fail = false; return !!CFG.openaiKey && !CL.fail && getOV().engine !== 'device'; };
 function cloudEl() { if (!CL.el) CL.el = new Audio(); return CL.el; }
 // sblocca l'audio al primo tocco (Safari/iOS)
 document.addEventListener('pointerdown', () => { try { const e = cloudEl(); if (!e.dataset.u) { e.dataset.u = 1; e.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='; e.play().catch(() => { }); } } catch { } }, { once: true, capture: true });
@@ -21,10 +21,18 @@ function cloudChunks(text) {
   for (const c of ttsChunks(ttsClean(text))) { if ((cur + ' ' + c).length > 520 && cur) { out.push(cur); cur = c; } else cur = (cur + ' ' + c).trim(); }
   if (cur) out.push(cur); return out;
 }
-function ttsFetch(text, voice, speed) {
-  const k = voice + '|' + speed + '|' + text; if (CL.cache.has(k)) return CL.cache.get(k);
-  const p = fetch('https://api.openai.com/v1/audio/speech', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + CFG.openaiKey }, body: JSON.stringify({ model: 'tts-1', voice, input: text, speed, response_format: 'mp3' }) })
-    .then(async r => { if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error?.message || 'Errore voce OpenAI'); } return URL.createObjectURL(await r.blob()); });
+const PERSONA = {
+  A: 'Sei un insegnante italiano esperto: voce calda, autorevole ma gentile. Parla in modo naturale e spontaneo come in una vera conversazione, non come se leggessi: ritmo variabile, piccole pause tra le frasi, enfasi sulle parole importanti, ogni tanto un tono pensieroso.',
+  B: 'Sei una studentessa di 16 anni: voce giovane, vivace e naturale. Quando ragioni esiti un attimo, il tono sale quando non sei sicura e si rilassa quando sei sicura; ogni tanto si sente un sorriso nella voce. Parla spontaneamente, non leggere.',
+  P: 'Sei un tutor paziente e incoraggiante: voce calda e rilassata, ritmo naturale con pause brevi, enfasi sulle parole chiave, tono umano e partecipe come se parlassi a una persona di fronte a te.'
+};
+const ttsModel = () => CL.model || getOV().ttsModel || 'gpt-4o-mini-tts';
+function ttsFetch(text, voice, speed, who = 'P') {
+  const model = ttsModel(), k = model + '|' + voice + '|' + speed + '|' + who + '|' + text; if (CL.cache.has(k)) return CL.cache.get(k);
+  const body = { model, voice, input: text, response_format: 'mp3' };
+  if (model === 'tts-1') body.speed = speed; else body.instructions = (PERSONA[who] || PERSONA.P) + ` Lingua: ${LN[CFG.lang]}.` + (speed < .95 ? ' Parla con calma e lentamente.' : speed > 1.1 ? ' Parla con un ritmo più svelto.' : '');
+  const p = fetch('https://api.openai.com/v1/audio/speech', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + CFG.openaiKey }, body: JSON.stringify(body) })
+    .then(async r => { if (!r.ok) { const d = await r.json().catch(() => ({})); const msg = d.error?.message || 'Errore voce OpenAI'; if (model !== 'tts-1' && (r.status === 400 || r.status === 403 || r.status === 404)) { CL.model = 'tts-1'; CL.cache.delete(k); return ttsFetch(text, voice, speed, who); } throw new Error(msg); } return URL.createObjectURL(await r.blob()); });
   CL.cache.set(k, p); p.catch(() => CL.cache.delete(k)); if (CL.cache.size > 40) CL.cache.delete(CL.cache.keys().next().value); return p;
 }
 const playUrl = (url, token) => new Promise(res => { const e = cloudEl(); e.onended = e.onerror = () => res(); e.src = url; e.playbackRate = 1; e.play().catch(() => res()); });
@@ -33,15 +41,15 @@ async function cloudSpeak(text, done, who = 'P') {
   if (!cs.length) { done && done(); return; }
   document.body.classList.add('speaking');
   try {
-    let nxt = ttsFetch(cs[0], voice, speed);
+    let nxt = ttsFetch(cs[0], voice, speed, who);
     for (let i = 0; i < cs.length; i++) {
       const url = await nxt; if (token !== CL.token) return;
-      if (cs[i + 1]) nxt = ttsFetch(cs[i + 1], voice, speed);
+      if (cs[i + 1]) nxt = ttsFetch(cs[i + 1], voice, speed, who);
       await playUrl(url, token); if (token !== CL.token) return;
     }
     document.body.classList.remove('speaking'); done && done();
   } catch (e) {
-    if (token !== CL.token) return; document.body.classList.remove('speaking'); CL.fail = true;
+    if (token !== CL.token) return; document.body.classList.remove('speaking'); CL.fail = true; CL.failAt = Date.now();
     toast('Voce OpenAI non disponibile (' + e.message + '). Uso la voce del dispositivo.', 6000); speakNow(text, done);
   }
 }
@@ -52,7 +60,7 @@ function speakLine(text, who) {
     if (!('speechSynthesis' in window)) return res();
     const v = pickVoice(who === 'B' ? 'B' : 'A'), cs = ttsChunks(ttsClean(text)); if (!cs.length) return res();
     speechSynthesis.cancel(); speechSynthesis.resume();
-    cs.forEach((tx, i) => { const u = new SpeechSynthesisUtterance(tx); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = CFG.lang; u.rate = getOV().rate || 1; u.pitch = who === 'B' ? 1.12 : .92; if (i === cs.length - 1) u.onend = u.onerror = () => res(); speechSynthesis.speak(u); });
+    cs.forEach((tx, i) => { const u = new SpeechSynthesisUtterance(tx); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = CFG.lang; u.rate = (getOV().rate || 1) * (1 + (Math.random() - .5) * .07); u.pitch = (who === 'B' ? 1.12 : .92) * (1 + (Math.random() - .5) * .08); if (i === cs.length - 1) u.onend = u.onerror = () => res(); speechSynthesis.speak(u); });
   });
 }
 
@@ -63,9 +71,9 @@ async function playDialogue(from = 0) {
   for (let i = from; i < DLG.script.length; i++) {
     if (token !== DLG.token) return;
     const ln = DLG.script[i]; $$('#dlgLog .dl').forEach((e, k) => e.classList.toggle('now', k === i)); const el = $$('#dlgLog .dl')[i]; if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    if (cloudOn() && DLG.script[i + 1]) { const nx = DLG.script[i + 1]; cloudChunks(nx.text).slice(0, 1).forEach(c => ttsFetch(c, cvFor(nx.who), Math.min(4, Math.max(.5, getOV().rate || 1))).catch(() => { })); }
+    if (cloudOn() && DLG.script[i + 1]) { const nx = DLG.script[i + 1]; cloudChunks(nx.text).slice(0, 1).forEach(c => ttsFetch(c, cvFor(nx.who), Math.min(4, Math.max(.5, getOV().rate || 1)), nx.who).catch(() => { })); }
     await speakLine(ln.text, ln.who); if (token !== DLG.token) return;
-    await new Promise(r => setTimeout(r, 280));
+    await new Promise(r => setTimeout(r, 160 + Math.random() * 320));
   }
   if (token === DLG.token) { $$('#dlgLog .dl').forEach(e => e.classList.remove('now')); document.body.classList.remove('speaking'); }
 }
@@ -85,7 +93,7 @@ panels.oral = () => {
     DLG.names = type === 'exam' ? { A: 'Prof. Rossi', B: 'Giulia' } : { A: 'Marco', B: 'Sara' }; let sc = null;
     if (ai) {
       const how = { exam: 'Il professore (A) interroga la studentessa (B). B risponde in modo naturale e commette 1 o 2 errori realistici; A li nota, li spiega PASSO PER PASSO con calma e poi dà un voto. ', study: 'Due compagni di classe (A e B) ripassano insieme, si fanno domande a vicenda, si correggono con gentilezza e usano esempi. ', debate: 'A spiega e B fa domande curiose e intelligenti; A risponde con esempi chiari. ' }[type];
-      try { const r = parseJSON(await aiText('Sei uno sceneggiatore di dialoghi scolastici realistici tra due persone vere. Rispondi SOLO con JSON valido.', `${styleNote(g)}\n${how}Scrivi da 16 a 22 battute brevi (1-3 frasi), con un parlato naturale (qualche "dunque", "ehm", "ah, giusto"), senza emoji né elenchi. Usa SOLO il materiale. Formato: {"script":[{"who":"A","text":"..."},{"who":"B","text":"..."}]}\n\nTESTO:\n${g.text.slice(0, 9000)}`, 3500)); sc = r && r.script; } catch (e) { toast('AI non disponibile: ' + e.message); }
+      try { const r = parseJSON(await aiText('Sei uno sceneggiatore di dialoghi scolastici realistici tra due persone vere. Rispondi SOLO con JSON valido.', `${styleNote(g)}\n${how}Scrivi da 16 a 22 battute brevi (1-3 frasi), con un parlato spontaneo e umano: intercalari ("allora", "ecco", "mmh", "ah, giusto", "aspetta"), frasi brevi, qualche esitazione con i puntini, reazioni brevi all'altro ("esatto!", "ah, ok"), nessun elenco né emoji; le persone si rispondono davvero e non fanno monologhi. Usa SOLO il materiale. Formato: {"script":[{"who":"A","text":"..."},{"who":"B","text":"..."}]}\n\nTESTO:\n${g.text.slice(0, 9000)}`, 3500)); sc = r && r.script; } catch (e) { toast('AI non disponibile: ' + e.message); }
     }
     DLG.script = (sc && sc.length ? sc : localPodcast(g)).filter(x => x && x.text).map(x => ({ who: x.who === 'B' ? 'B' : 'A', text: String(x.text) }));
     $('#dlgLog').innerHTML = DLG.script.map(l => `<div class="dl ${l.who}"><b>${esc(DLG.names[l.who])}</b><span>${esc(l.text)}</span></div>`).join('');
@@ -140,10 +148,11 @@ panels.settings = () => {
   <p class="muted">Incolla qui la tua chiave OpenAI (inizia con <code>sk-</code>). Resta <b>solo in questo dispositivo</b>: non viene mai scritta nel codice del sito. Non condividerla con nessuno.</p>
   <label style="display:flex">Chiave OpenAI<input id="oak" type="password" autocomplete="off" placeholder="sk-…" value="${esc(CFG.openaiKey || '')}"></label>
   <div class="row"><label>Modello<select id="oam"><option value="gpt-4o" ${CFG.openaiModel !== 'gpt-4o-mini' ? 'selected' : ''}>gpt-4o (migliore, legge le foto)</option><option value="gpt-4o-mini" ${CFG.openaiModel === 'gpt-4o-mini' ? 'selected' : ''}>gpt-4o-mini (più economico)</option></select></label>
+  <label>Qualità voce<select id="otm"><option value="gpt-4o-mini-tts" ${(o.ttsModel || 'gpt-4o-mini-tts') !== 'tts-1' ? 'selected' : ''}>Espressiva e umana (consigliata)</option><option value="tts-1" ${o.ttsModel === 'tts-1' ? 'selected' : ''}>Standard (più economica)</option></select></label>
   <label>Motore voce<select id="oen"><option value="cloud" ${o.engine !== 'device' ? 'selected' : ''}>Voce realistica OpenAI</option><option value="device" ${o.engine === 'device' ? 'selected' : ''}>Voce del dispositivo (gratis)</option></select></label></div>
   <div class="row"><label>Voce 1 (professore)${sel('cvA', CVOICES, cvFor('A'))}</label><label>Voce 2 (studente)${sel('cvB', CVOICES, cvFor('B'))}</label><label>Voce del tutor${sel('cvP', CVOICES, cvFor('P'))}</label></div>
   <div class="row"><button class="btn" id="oSave">💾 Salva</button><button class="btn alt" id="oTest">✅ Prova la chiave</button><button class="btn alt" id="oVoice">🔊 Prova le voci</button><button class="btn del" id="oDel">Rimuovi chiave</button></div></div>`);
-  const saveO = () => { CFG.openaiKey = $('#oak').value.trim(); CFG.openaiModel = $('#oam').value; saveCfg(); const x = getOV(); x.engine = $('#oen').value; x.cvA = $('#cvA').value; x.cvB = $('#cvB').value; x.cvP = $('#cvP').value; localStorage.setItem('shashi_oralv', JSON.stringify(x)); CL.fail = false; };
+  const saveO = () => { CFG.openaiKey = $('#oak').value.trim(); CFG.openaiModel = $('#oam').value; saveCfg(); const x = getOV(); x.engine = $('#oen').value; x.ttsModel = $('#otm').value; CL.model = ''; x.cvA = $('#cvA').value; x.cvB = $('#cvB').value; x.cvP = $('#cvP').value; localStorage.setItem('shashi_oralv', JSON.stringify(x)); CL.fail = false; };
   $('#oSave').onclick = () => { saveO(); toast('Salvato ✔️'); }; $('#oDel').onclick = () => { CFG.openaiKey = ''; saveCfg(); panels.settings(); toast('Chiave rimossa.'); };
   $('#oTest').onclick = async () => { saveO(); if (!CFG.openaiKey) return toast('Inserisci la chiave.'); toast('Provo la chiave…'); try { const r = await aiText('Rispondi in una frase.', 'Dimmi "Ciao, funziono!"', 30); toast('✅ ' + (r || 'ok')); } catch (e) { toast('❌ ' + e.message, 7000); } };
   $('#oVoice').onclick = async () => { saveO(); if (!CFG.openaiKey) return toast('Inserisci la chiave.'); stopDialogue(); await speakLine('Buongiorno! Sono il professor Rossi. Oggi parliamo di storia: sei pronta?', 'A'); await speakLine('Buongiorno professore, sì, ho ripassato tutto ieri sera.', 'B'); };
@@ -475,6 +484,3 @@ function settingsExtra() {
   $('#uxPrev').onclick = () => { idleStart(); };
 }
 
-// ============ avvio ============
-{ const hr = $('.hright'), d = $('#darkBtn'); if (hr && d && !$('#sfxBtn')) { const b = document.createElement('button'); b.id = 'sfxBtn'; b.className = 'pill'; b.title = 'Effetti sonori'; b.textContent = CFG.sfx === false ? '🔇' : '🔊'; b.onclick = () => { CFG.sfx = CFG.sfx === false; saveCfg(); b.textContent = CFG.sfx === false ? '🔇' : '🔊'; sfx('pop'); }; hr.insertBefore(b, d); } }
-applyAnim(); buildNav(); go(cur);
